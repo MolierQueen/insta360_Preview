@@ -2,11 +2,13 @@
 
 Insta Library 是一个 macOS / Windows 本地只读素材浏览器。电脑连接 Insta360 相机 Wi-Fi 后，应用通过本机服务读取相机目录，在浏览器中展示照片、视频、日期分组和批量下载，并提供可选相框导出、视频时间轴预览及 2:1 全景照片的 360° 拖拽查看。
 
-这份源码可以直接生成当前版本的 Apple Silicon App、Intel App，或同时生成两种版本。成品会内置 Python、Node.js、前端页面和运行依赖，使用者不需要再安装开发环境。
+这份源码可以直接打出 Apple Silicon、Intel 和 Windows x64 三种包。打好的成品里会带上 Python、Node.js、前端页面和运行依赖，使用的人不需要再装开发环境。
 
 > 项目坚持只读边界：控制通道只发送已经验证的读取命令，不提供拍摄、修改设置或删除文件功能。
 
-> Git 仓库不保留完整的 Windows 预构建便携目录，避免提交不完整产物；Windows 使用者请按本文命令自行重新打包。
+> 这个仓库主要放源码，不放完整的 Windows 成品包；Windows 请按下面的命令自己重新打包。
+>
+> `InstaLibrary-Source.zip` 这种源码压缩包也不再放进 Git。仓库里已经有完整的 `InstaLibrary-Source/` 目录，需要时自己执行脚本生成就行。
 
 ## 目录结构
 
@@ -47,7 +49,7 @@ xcode-select --install
 
 ## 首次准备
 
-进入解压后的源码目录：
+进入源码目录：
 
 ```bash
 cd /path/to/InstaLibrary-Source
@@ -56,7 +58,7 @@ python3 -m venv .venv
 npm --prefix web ci
 ```
 
-`npm ci` 会严格按照 `web/package-lock.json` 安装前端依赖。不要把 `node_modules` 提交或复制进源码包。
+`npm ci` 会按 `web/package-lock.json` 安装前端依赖。不要把 `node_modules` 提交进仓库。
 
 ## 本地开发
 
@@ -64,7 +66,7 @@ npm --prefix web ci
 .venv/bin/python tools/run_web_app.py
 ```
 
-脚本会启动本地 API 和开发页面。修改前端文件后浏览器会自动更新。退出开发服务时在终端按 `Control-C`。
+脚本会启动本地 API 和开发页面。改前端后浏览器会自动刷新。退出时按 `Control-C`。
 
 主要修改入口：
 
@@ -81,35 +83,35 @@ npm --prefix web ci
 npm --prefix web test
 ```
 
-修改协议或媒体代理时，至少执行一次完整测试，确保只读命令白名单和文件路径白名单没有被破坏。
+如果改了协议或媒体代理，最好把测试完整跑一遍，确认只读限制还在。
 
 ## 打包 App
 
-生成 Apple Silicon 版本：
+打 Apple Silicon：
 
 ```bash
 tools/build_distributions.sh arm64
 ```
 
-生成 Intel 版本：
+打 Intel：
 
 ```bash
 tools/build_distributions.sh x86_64
 ```
 
-同时生成两个版本：
+两个一起打：
 
 ```bash
 tools/build_distributions.sh all
 ```
 
-生成 Windows 10 / 11 x64 便携版（可以在 macOS 上交叉打包）：
+打 Windows x64：
 
 ```bash
 tools/build_windows_distribution.sh
 ```
 
-首次运行打包脚本时，会自动下载对应架构的 Python 3.14 和 Node.js 22 运行时，并缓存在 `.build-cache/`。再次打包会直接使用缓存。
+第一次打包时，脚本会自动下载对应架构的 Python 3.14 和 Node.js 22，并缓存到 `.build-cache/`。之后再打会直接复用缓存。
 
 输出位于 `dist/`：
 
@@ -124,20 +126,20 @@ dist/
 └── README-分发说明.md
 ```
 
-Windows 使用者应完整解压 ZIP，然后双击 `Insta Library.cmd`。Windows 包同样内置 Python、Node.js 和全部运行资源，不需要额外安装开发环境。
+Windows 这边把 ZIP 完整解压后，双击 `Insta Library.cmd` 就能跑。
 
-给其他人发送时优先发送 ZIP，不要直接发送 `.app` 文件夹，以免包结构或扩展属性在传输中损坏。
+发给别人时，优先发 ZIP，不要直接发 `.app` 文件夹。
 
 ## 常见打包失败与处理
 
-- `missing build command: xxx`：本机缺少脚本依赖。先安装 Xcode Command Line Tools，确认 `node --version`、`npm --version`、`python3 --version`、`clang --version` 都能正常输出。
-- `npm --prefix web ci` 失败：通常是 Node 版本过低或网络拉包失败。先升级到 Node.js 22，再重新执行 `npm --prefix web ci`。
-- `pip install -r requirements.txt` 失败：通常是 Python 版本过低，或虚拟环境没有正确激活。建议重新执行 `python3 -m venv .venv`，再用 `.venv/bin/python -m pip install -r requirements.txt`。
-- `curl` 下载运行时失败：首次打包需要联网下载 Python 3.14 和 Node.js 22 运行时。检查网络、代理、防火墙后重试；成功下载后缓存会保存在 `.build-cache/`。
-- `missing Ultra HDR codec for arm64` 或 `missing Ultra HDR codec for x86_64`：当前源码目录缺少对应架构的 `vendor/ultrahdr/macos-*` 可执行文件，需先补齐该目录内容，再重新打包。
-- `codesign` 失败：一般是 Xcode Command Line Tools 没装好，或系统签名工具异常。先执行 `xcode-select --install`，必要时执行 `sudo xcode-select -switch /Library/Developer/CommandLineTools` 后重试。
-- `Insta Library-Apple-Silicon is still running` 或 `Insta Library-Intel is still running`：旧版 App 还在运行，脚本为了避免覆盖正在使用的 bundle 会直接退出。先在应用里点击“退出应用”，或在活动监视器里结束相关进程，再重新打包。
-- 产物生成了但双击打不开：当前是 ad-hoc 本地签名，其他 Mac 第一次打开时可能被 Gatekeeper 拦截。让对方在 Finder 里右键 App 选择“打开”；如果要公开分发，建议用自己的 Apple Developer ID 重新签名并做公证。
+- `missing build command: xxx`：少工具。先装 Xcode Command Line Tools，再检查 `node`、`npm`、`python3`、`clang` 能不能用。
+- `npm --prefix web ci` 失败：多半是 Node 版本不对，或者网络拉包失败。先用 Node 22，再重试。
+- `pip install -r requirements.txt` 失败：多半是 Python 版本不对，或者虚拟环境没建好。重新跑一遍 `python3 -m venv .venv` 和安装命令。
+- `curl` 下载运行时失败：第一次打包必须联网。检查网络、代理或防火墙后重试。
+- `missing Ultra HDR codec`：源码目录里缺少 `vendor/ultrahdr/macos-*` 对应文件，要先补齐。
+- `codesign` 失败：一般是 Xcode Command Line Tools 没装好。先执行 `xcode-select --install`，不行的话再切一下工具链。
+- `Insta Library-Apple-Silicon is still running` 或 `Insta Library-Intel is still running`：先把旧版 App 关掉，再重新打。
+- App 打出来了但打不开：这是本地签名导致的。右键 App 选“打开”即可。要正式分发的话，还是建议你自己重新签名和公证。
 
 ## 重新生成源码包
 
@@ -147,7 +149,7 @@ Windows 使用者应完整解压 ZIP，然后双击 `Insta Library.cmd`。Window
 tools/build_source_package.sh
 ```
 
-结果为 `dist/InstaLibrary-Source.zip`。脚本会排除 `.venv`、`node_modules`、前端构建目录、Git 元数据和本机缓存。
+结果是 `dist/InstaLibrary-Source.zip`。脚本会自动排除 `.venv`、`node_modules`、前端构建目录、Git 元数据和本机缓存。
 
 ## 使用方式
 
@@ -157,7 +159,7 @@ tools/build_source_package.sh
 4. 在网页中点击“连接相机”。
 5. 完成后点击“断开并退出”。
 
-当前是 ad-hoc 本地签名。其他 Mac 第一次启动时，可能需要在 Finder 中右键 App，选择“打开”。面向公众发布时，应使用 Apple Developer ID 重新签名并完成公证。
+当前是 ad-hoc 本地签名。别的 Mac 第一次打开时，可能需要在 Finder 里右键 App 再点“打开”。如果你要正式分发，最好还是用自己的 Apple Developer ID 重新签名并公证。
 
 ## 媒体预览边界
 
