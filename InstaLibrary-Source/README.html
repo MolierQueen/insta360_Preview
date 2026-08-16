@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="不依赖原生 App，在 Mac 上通过相机 Wi‑Fi 只读浏览 Insta360 素材：研究过程、协议观察、工程实现与打包方法。">
+  <title>从相机 Wi‑Fi 到本地素材库：Insta Library 实现手记</title>
+  <style>
+    :root {
+      --ink:#171917; --muted:#687066; --paper:#f3f5ef; --card:#fff;
+      --line:#dde1d8; --lime:#d8ff45; --lime-dark:#708c00; --night:#171a16;
+      --blue:#4f7cff; --orange:#ff9a4d; --red:#d65b4a; --code:#101310;
+      --shadow:0 22px 70px rgba(24,29,21,.10);
+    }
+    *{box-sizing:border-box} html{scroll-behavior:smooth;background:var(--paper)}
+    body{margin:0;color:var(--ink);background:linear-gradient(180deg,#eef1e8 0,#f8f9f5 520px,var(--paper) 100%);font-family:Inter,"SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif;line-height:1.75}
+    a{color:inherit;text-decoration-color:#9cb922;text-underline-offset:4px} code,pre{font-family:"SFMono-Regular",Consolas,monospace}
+    .progress{position:fixed;left:0;top:0;z-index:50;width:0;height:3px;background:var(--lime-dark)}
+    .top{width:min(1220px,calc(100% - 40px));margin:0 auto;padding:24px 0;display:flex;align-items:center;justify-content:space-between}
+    .brand{display:flex;align-items:center;gap:11px;font-weight:850}.brand img{width:38px;height:38px;border-radius:11px;box-shadow:0 5px 14px rgba(0,0,0,.16)}
+    .top nav{display:flex;gap:20px;color:var(--muted);font-size:13px}.top nav a{text-decoration:none}.top nav a:hover{color:var(--ink)}
+    .hero{width:min(1220px,calc(100% - 40px));min-height:650px;margin:8px auto 54px;padding:70px;border-radius:36px;position:relative;overflow:hidden;color:#fff;background:radial-gradient(circle at 78% 23%,rgba(216,255,69,.24),transparent 23%),linear-gradient(130deg,#141614,#252b22 70%,#343d2c);box-shadow:0 34px 90px rgba(25,30,21,.18)}
+    .hero:after{content:"";position:absolute;width:520px;height:520px;right:-130px;bottom:-230px;border:2px solid rgba(216,255,69,.18);border-radius:50%;box-shadow:0 0 0 42px rgba(216,255,69,.035),0 0 0 88px rgba(216,255,69,.025)}
+    .kicker{margin:0 0 18px;color:var(--lime);font-size:12px;font-weight:850;letter-spacing:.19em;text-transform:uppercase}
+    .hero h1{max-width:900px;margin:0;font-size:clamp(44px,7vw,90px);line-height:.98;letter-spacing:-.065em}
+    .hero .lead{max-width:720px;margin:28px 0 0;color:#cbd1c7;font-size:18px;line-height:1.8}
+    .hero-meta{display:flex;flex-wrap:wrap;gap:9px;margin-top:40px}.hero-meta span{padding:8px 12px;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.05);color:#dce1d8;font-size:11px}
+    .hero-note{position:absolute;right:62px;top:64px;width:158px;padding:16px;border:1px solid rgba(216,255,69,.28);border-radius:18px;background:rgba(12,14,12,.42);transform:rotate(3deg)}
+    .hero-note strong{display:block;color:var(--lime);font-size:28px}.hero-note span{color:#bfc5ba;font-size:11px;line-height:1.45}
+    .layout{width:min(1220px,calc(100% - 40px));margin:0 auto;display:grid;grid-template-columns:230px minmax(0,1fr);gap:54px;align-items:start}
+    .toc{position:sticky;top:28px;padding:20px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.72);backdrop-filter:blur(12px)}
+    .toc strong{display:block;margin-bottom:10px;font-size:12px;letter-spacing:.12em}.toc a{display:block;padding:6px 0;color:var(--muted);font-size:12px;text-decoration:none}.toc a:hover{color:var(--ink)}
+    article{min-width:0}.chapter{margin:0 0 90px;scroll-margin-top:28px}.chapter-no{display:inline-grid;place-items:center;width:34px;height:34px;margin-bottom:17px;border-radius:10px;background:var(--ink);color:var(--lime);font-size:12px;font-weight:900}
+    h2{margin:0 0 22px;font-size:clamp(30px,4.2vw,52px);line-height:1.08;letter-spacing:-.052em}h3{margin:42px 0 14px;font-size:22px;letter-spacing:-.025em}h4{margin:25px 0 10px;font-size:15px}
+    p{margin:0 0 18px} .intro{color:#3f463e;font-size:18px;line-height:1.9}.muted{color:var(--muted)}
+    .callout{margin:26px 0;padding:22px 24px;border:1px solid #cbd89a;border-left:5px solid var(--lime-dark);border-radius:16px;background:#f5fbdc}.callout strong{display:block;margin-bottom:5px}.callout.warn{border-color:#e7c9a6;border-left-color:var(--orange);background:#fff7ec}.callout.dark{border-color:#333a31;border-left-color:var(--lime);background:var(--night);color:#e8ebe5}.callout.dark p{color:#bfc6bb}
+    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:26px 0}.card{padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--card);box-shadow:0 8px 24px rgba(24,29,21,.035)}.card b{display:block;margin-bottom:7px;font-size:15px}.card p{margin:0;color:var(--muted);font-size:13px;line-height:1.65}.card .tag{display:inline-block;margin-bottom:16px;padding:4px 7px;border-radius:6px;background:#eff8ce;color:#405500;font-size:9px;font-weight:850;letter-spacing:.08em}
+    .diagram{margin:30px 0;padding:28px;border:1px solid #353b33;border-radius:24px;background:#171a16;color:#fff;box-shadow:var(--shadow)}.diagram-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}.diagram-title strong{font-size:13px}.diagram-title span{color:#8f978b;font-size:10px;letter-spacing:.12em}
+    .flow{display:grid;grid-template-columns:repeat(5,1fr);gap:20px}.node{min-height:112px;padding:16px;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:#222720;position:relative}.node:not(:last-child):after{content:"→";position:absolute;right:-17px;top:40%;color:var(--lime);font-weight:900}.node em{display:block;margin-bottom:9px;color:var(--lime);font-size:10px;font-style:normal;font-weight:850;letter-spacing:.08em}.node b{display:block;font-size:13px}.node small{display:block;margin-top:7px;color:#9fa79b;font-size:10px;line-height:1.5}
+    .layers{display:grid;gap:8px}.layer{display:grid;grid-template-columns:155px 1fr;gap:18px;align-items:center;padding:15px 18px;border-radius:13px;background:#222720}.layer b{color:var(--lime);font-size:11px}.layer span{color:#c6ccc2;font-size:12px}
+    .frame{display:flex;gap:4px;overflow:auto;padding-bottom:5px}.frame span{min-width:84px;padding:16px 10px;border-radius:10px;text-align:center;font-size:10px;line-height:1.45}.frame b{display:block;margin-bottom:4px;font-size:11px}.f-magic{background:#d8ff45;color:#171917}.f-head{background:#53605b}.f-data{min-width:250px!important;background:#365066}.f-tail{background:#7b493e}
+    pre{position:relative;margin:24px 0;padding:22px;overflow:auto;border-radius:16px;background:var(--code);color:#dce6d8;font-size:12px;line-height:1.75;box-shadow:0 14px 36px rgba(0,0,0,.12)}pre .lime{color:var(--lime)}pre .blue{color:#7ea6ff}code.inline{padding:2px 6px;border-radius:6px;background:#e8ece3;color:#31372f;font-size:.88em}
+    .timeline{margin:28px 0 0;padding-left:24px;border-left:2px solid #cbd2c5}.event{position:relative;padding:0 0 28px 22px}.event:before{content:"";position:absolute;left:-31px;top:6px;width:12px;height:12px;border:3px solid var(--paper);border-radius:50%;background:var(--lime-dark);box-shadow:0 0 0 1px #9cab68}.event time{display:block;color:var(--lime-dark);font-size:10px;font-weight:850;letter-spacing:.09em}.event b{display:block;margin:3px 0}.event p{margin:0;color:var(--muted);font-size:13px}
+    .table-wrap{margin:24px 0;overflow:auto;border:1px solid var(--line);border-radius:17px;background:#fff}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:14px 16px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:#f0f3eb;font-size:11px;letter-spacing:.06em}tr:last-child td{border-bottom:0}.ok{color:#526a00;font-weight:800}.limit{color:#a14c38;font-weight:800}
+    .steps{counter-reset:step;display:grid;gap:12px;margin:24px 0}.step{counter-increment:step;display:grid;grid-template-columns:42px 1fr;gap:14px;padding:18px;border:1px solid var(--line);border-radius:16px;background:#fff}.step:before{content:counter(step);width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:var(--ink);color:var(--lime);font-weight:900}.step b{display:block}.step p{margin:3px 0 0;color:var(--muted);font-size:13px}
+    .file-tree{padding:22px;border:1px solid var(--line);border-radius:17px;background:#fff;font-family:"SFMono-Regular",monospace;font-size:12px;line-height:1.8}.file-tree .folder{color:#526a00;font-weight:800}.file-tree .note{color:#838a80}
+    .references{display:grid;gap:10px;margin-top:25px}.reference{display:flex;justify-content:space-between;gap:20px;padding:14px 16px;border:1px solid var(--line);border-radius:13px;background:#fff;text-decoration:none}.reference span{color:var(--muted);font-size:11px}.reference:hover{border-color:#a9bd53}
+    footer{margin-top:70px;padding:58px 20px;background:#171a16;color:#bec5ba;text-align:center}footer strong{display:block;color:#fff;font-size:18px}footer p{max-width:680px;margin:10px auto 0;font-size:12px}
+    @media(max-width:900px){.layout{grid-template-columns:1fr}.toc{display:none}.hero{padding:48px 32px}.hero-note{display:none}.cards{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.node:not(:last-child):after{content:"↓";right:50%;top:auto;bottom:-21px}.layer{grid-template-columns:1fr;gap:3px}.top nav{display:none}}
+    @media(max-width:560px){.top,.hero,.layout{width:min(100% - 22px,1220px)}.hero{min-height:590px;padding:42px 23px;border-radius:25px}.hero h1{font-size:45px}.hero .lead{font-size:15px}.diagram{padding:19px}.frame span{min-width:75px}.reference{flex-direction:column;gap:4px}}
+    @media print{.progress,.top,.toc{display:none}.hero{min-height:auto;color:#111;background:#fff;box-shadow:none;border:1px solid #ddd}.hero .lead{color:#444}.layout{display:block}.chapter{break-inside:avoid}.diagram{break-inside:avoid}}
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <header class="top">
+    <div class="brand"><img src="assets/InstaLibraryIcon.png" alt=""><span>Insta Library · Engineering Notes</span></div>
+    <nav><a href="#background">缘起</a><a href="#protocol">协议</a><a href="#architecture">架构</a><a href="#packaging">打包</a><a href="#usage">使用</a></nav>
+  </header>
+
+  <section class="hero">
+    <p class="kicker">A read-only interoperability project</p>
+    <h1>从相机 Wi‑Fi<br>到本地素材库</h1>
+    <p class="lead">不调用原生 App，也不把 SDK 当作黑盒依赖。我用一条只读控制会话取得素材目录，再让浏览器通过本机代理直接预览和下载相机 SD 卡里的照片与视频。</p>
+    <div class="hero-meta"><span>macOS 11+</span><span>Apple Silicon / Intel</span><span>TCP 6666 + HTTP 80</span><span>Read-only by design</span></div>
+    <div class="hero-note"><strong>456</strong><span>首次完整实机验证中读取到的相机文件数量</span></div>
+  </section>
+
+  <main class="layout">
+    <aside class="toc">
+      <strong>CONTENTS</strong>
+      <a href="#background">01 · 为什么要自己做</a>
+      <a href="#research">02 · 从失败中定位入口</a>
+      <a href="#protocol">03 · 只读协议观察</a>
+      <a href="#architecture">04 · App 的整体架构</a>
+      <a href="#backend">05 · 后端关键逻辑</a>
+      <a href="#frontend">06 · 前端体验设计</a>
+      <a href="#safety">07 · 安全边界</a>
+      <a href="#packaging">08 · 双架构打包</a>
+      <a href="#development">09 · 二次开发</a>
+      <a href="#usage">10 · 使用方法</a>
+      <a href="#limits">11 · 已知边界</a>
+    </aside>
+
+    <article>
+      <section class="chapter" id="background">
+        <span class="chapter-no">01</span>
+        <h2>为什么要自己做一个素材浏览器</h2>
+        <p class="intro">需求并不复杂：电脑连接相机热点，打开一个页面，看见 SD 卡里的照片和视频，挑选后下载。困难在于，相机 Wi‑Fi 并不是一台带后台页面的普通路由器。</p>
+        <p>最初我也尝试过最直觉的办法：连接相机热点，在浏览器里打开网关地址。结果是没有管理页，也没有可遍历的文件目录。相机的 HTTP 服务确实存在，但它更像一条“已经知道文件路径之后再取文件”的数据通道；在取得有效会话和素材路径之前，单独访问网关没有意义。</p>
+        <p>官方 iOS SDK 给出了完整的能力轮廓：Wi‑Fi 建连、心跳、文件列表和文件下载都有对应接口。但它以 XCFramework 二进制依赖交付，适合 iOS 工程，不适合直接嵌入桌面 Web 工具。官方文档也明确把“获取文件列表”和“文件下载”列为 Camera SDK 的文件管理能力。于是问题变成了：能否只复现浏览素材所需的最小只读链路？</p>
+        <div class="cards">
+          <div class="card"><span class="tag">目标</span><b>摆脱 App 依赖</b><p>相机热点与电脑之间直接通信，不要求手机参与，也不要求互联网。</p></div>
+          <div class="card"><span class="tag">原则</span><b>只读优先</b><p>不拍摄、不改参数、不删除、不格式化；协议允许列表在发送前硬检查。</p></div>
+          <div class="card"><span class="tag">交付</span><b>普通浏览器界面</b><p>照片、视频、日期分组、批选、分页和下载都留在熟悉的 Web 交互里。</p></div>
+        </div>
+        <div class="callout warn"><strong>独立互操作项目</strong><p>本文记录的是实机流量观察与工程实现，不是 Insta360 对私有协议的官方承诺。相机型号或固件变化可能改变行为。</p></div>
+      </section>
+
+      <section class="chapter" id="research">
+        <span class="chapter-no">02</span>
+        <h2>从“网关打不开”到两条并行通道</h2>
+        <p class="intro">真正的突破不是找到某个隐藏网页，而是确认控制和文件传输根本不是同一条连接。</p>
+        <div class="timeline">
+          <div class="event"><time>STEP 01</time><b>直接访问网关失败</b><p>浏览器没有目录页，常规 HTTP 探测也拿不到素材清单。</p></div>
+          <div class="event"><time>STEP 02</time><b>被动观察原生 App 流量</b><p>发现 App 会先连接相机的 TCP 6666 端口，并维持长连接。</p></div>
+          <div class="event"><time>STEP 03</time><b>识别 UCD2 帧与 Protobuf 数据</b><p>控制帧以 UCD2 开头，响应负载中可见设备选项与 DCIM 文件路径。</p></div>
+          <div class="event"><time>STEP 04</time><b>固定重放只读请求</b><p>不推测写指令，只重放已捕获的命令 8 与命令 13；拿到路径后再访问 HTTP 文件服务。</p></div>
+          <div class="event"><time>STEP 05</time><b>浏览器产品化</b><p>用本机 API 持有会话、限制路径、代理 Range 请求，前端只面对清晰的 JSON 和媒体 URL。</p></div>
+        </div>
+        <div class="diagram">
+          <div class="diagram-title"><strong>一份素材如何来到浏览器</strong><span>CONTROL + DATA</span></div>
+          <div class="flow">
+            <div class="node"><em>01 · WIFI</em><b>Mac 连接相机热点</b><small>没有互联网是正常状态</small></div>
+            <div class="node"><em>02 · CONTROL</em><b>TCP 6666 建立会话</b><small>同步、只读查询、心跳</small></div>
+            <div class="node"><em>03 · INDEX</em><b>解析 DCIM 路径</b><small>生成精确文件白名单</small></div>
+            <div class="node"><em>04 · DATA</em><b>HTTP 80 Range</b><small>按需读取图片或视频片段</small></div>
+            <div class="node"><em>05 · UI</em><b>浏览器预览</b><small>筛选、分组、选择与下载</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="chapter" id="protocol">
+        <span class="chapter-no">03</span>
+        <h2>对 UCD2 控制帧的最小理解</h2>
+        <p>捕获到的控制帧以 ASCII 字节 <code class="inline">UCD2</code> 开头。当前实现只需要知道怎样划分完整帧、怎样取得内部序列号，以及怎样从响应负载里解析状态与 Protobuf 数据。尾部四字节完整性字段没有被臆测重算，而是保留捕获值。</p>
+        <div class="diagram">
+          <div class="diagram-title"><strong>观察到的帧布局</strong><span>NOT AN OFFICIAL SPEC</span></div>
+          <div class="frame">
+            <span class="f-magic"><b>Magic</b>4 bytes<br>UCD2</span>
+            <span class="f-head"><b>Version / Type</b>4 bytes<br>外层元数据</span>
+            <span class="f-head"><b>Length</b>4 bytes<br>little-endian</span>
+            <span class="f-data"><b>Payload</b>变长<br>状态、序列号、Protobuf</span>
+            <span class="f-tail"><b>Integrity</b>4 bytes<br>固定捕获值</span>
+          </div>
+        </div>
+        <h3>为什么坚持固定帧</h3>
+        <p>完整性字段无法从少量样本中可靠归纳。与其“猜一个 CRC 然后试试看”，我选择只保存已经由官方 App 发出、并在实机验证成功的读取帧。这样做牺牲了任意分页参数，却把风险压缩到可以审计的常量集合。</p>
+        <pre><span class="blue">ALLOWED_COMMANDS</span> = {<span class="lime">8</span>, <span class="lime">13</span>}
+
+def send_readonly(sock, frame):
+    command = inner_request_code(frame)
+    if command not in ALLOWED_COMMANDS:
+        raise RuntimeError("READ-ONLY policy rejected command")
+    sock.sendall(frame)</pre>
+        <div class="table-wrap"><table>
+          <thead><tr><th>内部命令</th><th>在本项目中的用途</th><th>发送策略</th></tr></thead>
+          <tbody>
+            <tr><td><code>8</code></td><td>读取设备、存储等选项信息</td><td class="ok">固定捕获帧</td></tr>
+            <tr><td><code>13</code></td><td>读取文件列表，固定起点 0 / 100 / 200 / 300 / 400</td><td class="ok">固定捕获帧</td></tr>
+            <tr><td>其他</td><td>拍摄、设置、删除、格式化等潜在写操作</td><td class="limit">发送前拒绝</td></tr>
+          </tbody>
+        </table></div>
+        <p>控制连接还需要心跳。官方 SDK 文档同样指出，长时间会话必须持续发送 heartbeat，否则相机会判定连接断开。项目使用固定心跳帧维持只读会话，文件代理则在这个会话存活期间工作。</p>
+      </section>
+
+      <section class="chapter" id="architecture">
+        <span class="chapter-no">04</span>
+        <h2>整体架构：浏览器之外，还有三层</h2>
+        <p class="intro">网页不能直接打开任意 TCP Socket，也不应该知道相机私有帧。因此 App 把设备协议、文件代理和产品界面分开。</p>
+        <div class="diagram">
+          <div class="diagram-title"><strong>运行时分层</strong><span>LOCALHOST ONLY</span></div>
+          <div class="layers">
+            <div class="layer"><b>macOS App Shell</b><span>原生 Mach-O 启动器、图标、日志与生命周期；点击网页退出后回收全部子进程。</span></div>
+            <div class="layer"><b>Web UI · :3000</b><span>React / vinext 生产构建；日期分组、缩略图、批量选择、分页和媒体预览。</span></div>
+            <div class="layer"><b>Local API · :8765</b><span>Python ThreadingHTTPServer；持有相机会话、输出 JSON、代理媒体与 Range。</span></div>
+            <div class="layer"><b>Camera Control</b><span>192.168.42.1:6666；UCD2 固定只读帧、响应匹配与心跳。</span></div>
+            <div class="layer"><b>Camera Files</b><span>192.168.42.1:80；只访问当前目录响应出现过的精确路径。</span></div>
+          </div>
+        </div>
+        <h3>为什么不是“纯 Web”</h3>
+        <p>浏览器的安全模型不允许页面随意连接 TCP 6666，也无法绕过跨域规则直接读取相机文件。localhost 服务不是多余的一层：它既是协议适配器，也是安全边界。网页只会调用 <code class="inline">127.0.0.1:8765</code>，而 API 只监听回环地址，局域网里的其他设备无法访问。</p>
+      </section>
+
+      <section class="chapter" id="backend">
+        <span class="chapter-no">05</span>
+        <h2>后端关键逻辑</h2>
+        <h3>1. 帧读取与请求匹配</h3>
+        <p>后台线程持续从 Socket 读取数据，把黏包与半包整理为完整 UCD2 帧。每个只读请求带内部序列号，响应到达后按序列号唤醒等待者，避免心跳或异步消息干扰当前请求。</p>
+        <pre>frames, buffer, discarded = extract_frames(buffer)
+for frame in frames:
+    sequence = inner_sequence(frame)
+    if frame[6] == 4 and sequence is not None:
+        responses[sequence] = frame</pre>
+        <h3>2. 文件目录与 500 条边界</h3>
+        <p>应用会先尝试读取相机 HTTP 目录索引。如果固件开放索引，就能取得完整目录，不受固定五页限制。如果目录索引关闭，则降级到五个已验证的 UCD2 分页帧，最多确认前 500 个文件，并在页面上明确显示截断提示。</p>
+        <div class="callout"><strong>“分页 300”与“协议 500”是两件事</strong><p>300 是浏览器每页渲染数量，控制页面性能；500 是降级协议能够确认的最大目录范围。界面分页不会凭空突破相机协议边界。</p></div>
+        <h3>3. 精确路径白名单</h3>
+        <p>媒体代理不接受任意文件系统路径。每次请求都必须与当前相机目录中的某个字符串完全相等；即使有人手工修改 URL，也不能借代理读取未列出的地址。</p>
+        <pre>def assert_known_path(self, path):
+    if path not in self.files:
+        raise ValueError("path is not in the current camera file list")</pre>
+        <h3>4. Range 转发</h3>
+        <p>视频播放不应先下载完整文件。浏览器发送的 <code class="inline">Range</code> 头会被转发给相机，API 再原样回传 <code class="inline">206 Partial Content</code>、Content-Range 和长度信息。这样拖动视频时间轴只读取所需片段。</p>
+      </section>
+
+      <section class="chapter" id="frontend">
+        <span class="chapter-no">06</span>
+        <h2>让数百个素材仍然像一个正常相册</h2>
+        <div class="cards">
+          <div class="card"><span class="tag">DATE</span><b>默认按自然日分组</b><p>从文件名提取拍摄时间，按日期倒序；无法识别的文件进入“日期未知”。</p></div>
+          <div class="card"><span class="tag">BATCH</span><b>跨页与整日选择</b><p>每页最多 300 项，但选择状态独立保存；“选择当天全部”不受当前分页切割影响。</p></div>
+          <div class="card"><span class="tag">MEDIA</span><b>视频首帧缩略图</b><p>优先匹配同名 LRV 低码率文件，没有代理文件时再从原视频读取首帧。</p></div>
+        </div>
+        <h3>预览不是“把原文件塞进标签”</h3>
+        <p>点击视频卡片后，播放器优先打开配对的 LRV 代理文件。浏览器原生控制条负责播放、暂停、音量与时间轴，而后端的 Range 转发保证拖到任意时间点时只向相机读取对应片段；下载按钮始终指向原始文件，不会把代理文件误当成成片。</p>
+        <p>照片载入后会先检查像素比例。接近 2:1 的等距柱状图会进入 360° 查看器：一个 WebGL 片元着色器把屏幕上的每个像素反投影为球面方向，再换算为全景纹理坐标。鼠标或触控拖动改变经纬视角，滚轮调整视场角；普通照片仍使用平面预览。</p>
+        <pre>const ratio = image.naturalWidth / image.naturalHeight;
+const panorama = ratio &gt;= 1.8 &amp;&amp; ratio &lt;= 2.2;
+
+longitude = atan(direction.x, direction.z);
+latitude  = asin(direction.y);</pre>
+        <div class="callout"><strong>全景查看器不负责拼接</strong><p>它面向已经是 2:1 等距柱状格式的 JPG/INSP 图像。若相机保存的是双鱼眼原始画面，仍需先用官方软件或独立拼接算法转换，浏览器不能仅靠旋转纹理恢复正确视角。</p></div>
+        <h3>快速滑动时，为什么骨架必须很轻</h3>
+        <p>一页 300 个卡片如果同时创建视频请求、同时执行 shimmer 动画，会把网络和合成线程一起压满。当前实现让全部卡片立即绘制静态占位，只有距离视口约 1400 像素以内的素材才开始请求，并且只有这批骨架执行动画。</p>
+        <pre>const observer = new IntersectionObserver(onVisible, {
+  rootMargin: <span class="lime">"1400px 0px"</span>
+});
+
+// 进入预取范围后才挂载 img / video
+{active &amp;&amp; &lt;MediaSource /&gt;}</pre>
+        <p>这个策略不追求“所有缩略图尽快下载”，而是优先保证滚动时屏幕上永远先有稳定的几何结构。对相机热点这种带宽有限、延迟偏高的网络尤其有效。</p>
+      </section>
+
+      <section class="chapter" id="safety">
+        <span class="chapter-no">07</span>
+        <h2>安全不是提示语，而是代码路径</h2>
+        <div class="table-wrap"><table>
+          <thead><tr><th>边界</th><th>实现</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td>控制命令</td><td>允许列表仅含 8、13</td><td>未知或写命令在 Socket 发送前被拒绝</td></tr>
+            <tr><td>文件路径</td><td>当前目录精确白名单</td><td>阻止路径注入和越权代理</td></tr>
+            <tr><td>网络监听</td><td>仅 127.0.0.1</td><td>其他局域网设备无法调用本机 API</td></tr>
+            <tr><td>目录完整性</td><td>截断状态显式展示</td><td>不把前 500 条伪装成完整目录</td></tr>
+            <tr><td>进程退出</td><td>网页 shutdown → API shutdown → 父进程回收</td><td>相机会话和两个本地端口一并关闭</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout dark"><strong>我刻意没有实现的功能</strong><p>删除文件、修改参数、拍照、录像、格式化存储卡、同步时间。这些能力与“浏览素材”无关，却会明显扩大误操作面。</p></div>
+      </section>
+
+      <section class="chapter" id="packaging">
+        <span class="chapter-no">08</span>
+        <h2>把开发项目变成两套自包含 App</h2>
+        <p class="intro">可分发版本不能假设朋友安装过 Python、Node、npm 或项目依赖。App 包内部包含运行所需的一切。</p>
+        <div class="diagram">
+          <div class="diagram-title"><strong>构建流水线</strong><span>REPRODUCIBLE PACKAGING</span></div>
+          <div class="flow">
+            <div class="node"><em>01</em><b>vinext build</b><small>生成自包含前端 server/client bundle</small></div>
+            <div class="node"><em>02</em><b>裁剪 Node</b><small>通用二进制分别 thin 为 arm64 / x86_64</small></div>
+            <div class="node"><em>03</em><b>嵌入 Python</b><small>Astral standalone 对应架构运行时</small></div>
+            <div class="node"><em>04</em><b>组装 App</b><small>代码、Protobuf、图标、许可证</small></div>
+            <div class="node"><em>05</em><b>签名与 ZIP</b><small>ad-hoc 签名，ditto 保留包元数据</small></div>
+          </div>
+        </div>
+        <h3>App 内部有什么</h3>
+        <div class="file-tree">
+          <span class="folder">Insta Library.app/</span><br>
+          ├── Contents/MacOS/<br>
+          │&nbsp;&nbsp; ├── InstaLibraryNativeLauncher <span class="note"># 对应架构 Mach-O</span><br>
+          │&nbsp;&nbsp; └── InstaLibraryLauncher <span class="note"># 环境与日志</span><br>
+          └── Contents/Resources/<br>
+          &nbsp;&nbsp;&nbsp; ├── runtime/node <span class="note"># arm64 或 x86_64</span><br>
+          &nbsp;&nbsp;&nbsp; ├── runtime/python/ <span class="note"># 独立 CPython</span><br>
+          &nbsp;&nbsp;&nbsp; ├── app/web-dist/ <span class="note"># 生产前端</span><br>
+          &nbsp;&nbsp;&nbsp; ├── app/tools/ <span class="note"># API 与启动逻辑</span><br>
+          &nbsp;&nbsp;&nbsp; ├── app/vendor/ <span class="note"># Protobuf 定义</span><br>
+          &nbsp;&nbsp;&nbsp; └── Licenses/ <span class="note"># 第三方许可证</span>
+        </div>
+        <h3>签名与公证</h3>
+        <p>当前分发包使用 ad-hoc 签名，适合朋友间研究。通过聊天软件或浏览器下载后，Gatekeeper 可能要求首次右键“打开”。如果要面向公众发布，应使用 Apple Developer ID 对嵌套二进制和 App 签名，提交 Apple 公证，再对分发包 stapling。Apple 官方将公证作为 Developer ID 应用分发的重要检查流程。</p>
+      </section>
+
+      <section class="chapter" id="development">
+        <span class="chapter-no">09</span>
+        <h2>源码如何继续改</h2>
+        <p>源码包与成品 App 分开。成品强调“拿来就用”，源码包保留前端、协议工具、测试、打包模板、图标和离线 Protobuf 依赖。开发依赖不直接塞进源码 ZIP，避免把 700 多 MB 的 <code class="inline">node_modules</code> 当源码分发。</p>
+        <div class="steps">
+          <div class="step"><div><b>安装开发依赖</b><p>创建 Python venv，安装 requirements；进入 web 执行 npm install。</p></div></div>
+          <div class="step"><div><b>修改功能</b><p>页面在 web/app/page.tsx，样式在 globals.css，本地 API 在 tools/insta360_web_server.py。</p></div></div>
+          <div class="step"><div><b>运行测试</b><p>Python 单元测试审计只读约束与解析；前端测试执行生产构建和服务端渲染检查。</p></div></div>
+          <div class="step"><div><b>重新打包</b><p>tools/build_distributions.sh 支持 all、arm64 或 x86_64 三种目标。</p></div></div>
+        </div>
+        <pre>python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+(cd web &amp;&amp; npm install)
+
+.venv/bin/python -m unittest discover -s tests -v
+npm --prefix web test
+
+tools/build_distributions.sh all</pre>
+        <div class="callout warn"><strong>扩展协议前先扩展证据</strong><p>不要因为某个 Protobuf 文件名叫 delete_files 就直接调用它。新增任何控制命令前，应先取得官方 App 的真实只读/写入行为样本，确认完整性字段、状态码和失败行为，并重新定义风险边界。</p></div>
+      </section>
+
+      <section class="chapter" id="usage">
+        <span class="chapter-no">10</span>
+        <h2>App 使用方式</h2>
+        <div class="steps">
+          <div class="step"><div><b>启动相机热点</b><p>保持相机唤醒，并完全退出手机上的 Insta360 App，避免两个客户端争用控制会话。</p></div></div>
+          <div class="step"><div><b>Mac 连接相机 Wi‑Fi</b><p>系统提示“无互联网连接”是预期状态，不要切回其他网络。</p></div></div>
+          <div class="step"><div><b>双击对应架构的 App</b><p>M 系列芯片使用 Apple Silicon 版；老款 Intel Mac 使用 Intel 版。</p></div></div>
+          <div class="step"><div><b>点击“连接相机”</b><p>目录读取完成后即可按日期浏览、搜索、批选、预览和下载。</p></div></div>
+          <div class="step"><div><b>点击“断开并退出”</b><p>页面先断开控制会话，再关闭本地 API 和网页服务；无需终端或 Ctrl+C。</p></div></div>
+        </div>
+        <h3>朋友第一次打不开怎么办</h3>
+        <p>ad-hoc 签名的 App 经网络传输后可能被 macOS 标记为来自未知开发者。先解压 ZIP，把 App 拖到“应用程序”，然后按住 Control 点击 App，选择“打开”，在确认框中再次选择“打开”。这是没有 Developer ID 公证时的正常限制。</p>
+      </section>
+
+      <section class="chapter" id="limits">
+        <span class="chapter-no">11</span>
+        <h2>已知边界与下一步</h2>
+        <div class="table-wrap"><table>
+          <thead><tr><th>项目</th><th>当前状态</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>相机型号</td><td class="limit">需要逐机验证</td><td>固定帧来自当前实机；不同固件可能改变响应或会话行为。</td></tr>
+            <tr><td>超过 500 个文件</td><td>条件支持</td><td>HTTP 目录索引开放时无限制；关闭时降级为前 500 条并提示。</td></tr>
+            <tr><td>DNG 浏览器预览</td><td class="limit">不支持</td><td>提供原文件下载，不在浏览器内做 RAW 解码。</td></tr>
+            <tr><td>360 照片预览</td><td>支持 2:1 全景</td><td>自动识别等距柱状图；未经拼接的双鱼眼原片不能直接转换为球面视角。</td></tr>
+            <tr><td>视频格式兼容</td><td>依浏览器解码器</td><td>LRV/MP4 通常可用；特殊编码可能只显示占位并允许下载。</td></tr>
+            <tr><td>公开分发</td><td class="limit">未公证</td><td>当前为朋友间研究包；正式发布需 Developer ID 签名与 Apple 公证。</td></tr>
+          </tbody>
+        </table></div>
+        <p>接下来最值得做的不是堆更多按钮，而是积累更多型号与固件样本：验证目录索引差异、命名规则、LRV 配对方式和控制会话超时。只要继续保持“观察先于实现”，这个项目就能扩展，而不会失去最初的安全边界。</p>
+        <h3>参考资料</h3>
+        <div class="references">
+          <a class="reference" href="https://github.com/Insta360Develop/iOS-SDK/blob/V1.9.2/README_zh.md"><b>Insta360 iOS SDK V1.9.2 中文文档</b><span>连接、心跳、文件列表、下载</span></a>
+          <a class="reference" href="https://github.com/DenisCarriere/insta360-wifi-api"><b>insta360-wifi-api</b><span>Protobuf 定义与早期社区研究</span></a>
+          <a class="reference" href="https://github.com/astral-sh/python-build-standalone"><b>python-build-standalone</b><span>可再分发 CPython 运行时</span></a>
+          <a class="reference" href="https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution"><b>Apple · Notarizing macOS software</b><span>Developer ID 分发与公证</span></a>
+        </div>
+      </section>
+    </article>
+  </main>
+
+  <footer><strong>Insta Library</strong><p>一个围绕真实需求生长出来的本地工具。相机协议属于设备厂商；本文与代码只用于互操作研究、个人素材管理和工程交流。</p></footer>
+  <script>
+    const progress = document.getElementById('progress');
+    const update = () => {
+      const height = document.documentElement.scrollHeight - innerHeight;
+      progress.style.width = `${height > 0 ? scrollY / height * 100 : 0}%`;
+    };
+    addEventListener('scroll', update, { passive: true }); update();
+  </script>
+</body>
+</html>

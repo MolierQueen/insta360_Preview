@@ -1,0 +1,16 @@
+#!/bin/zsh
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RESOURCES_DIR="$(cd "$SCRIPT_DIR/../Resources" && pwd)"
+LOG_DIR="$HOME/Library/Logs/Insta Library"
+mkdir -p "$LOG_DIR"
+exec >"$LOG_DIR/launch.log" 2>&1
+
+export PYTHONHOME="$RESOURCES_DIR/runtime/python"
+export PYTHONPATH="$RESOURCES_DIR/app/python-packages"
+export PYTHONDONTWRITEBYTECODE=1
+export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION="python"
+export PATH="$RESOURCES_DIR/runtime/python/bin:$RESOURCES_DIR/runtime:/usr/bin:/bin:/usr/sbin:/sbin"
+
+print "[$(date '+%Y-%m-%d %H:%M:%S')] starting self-contained Insta Library"
+exec "$RESOURCES_DIR/runtime/python/bin/python3" "$RESOURCES_DIR/app/tools/run_bundled_app.py"
