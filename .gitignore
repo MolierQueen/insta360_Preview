@@ -1,5 +1,11 @@
 .DS_Store
 *.DS_Store
+.venv/
+.build-cache/
+web/node_modules/
+web/dist/
+web/.next/
+output/
 Insta Library-Apple-Silicon.app/
 Insta Library-Intel.app/
 InstaLibrary-Source.zip
