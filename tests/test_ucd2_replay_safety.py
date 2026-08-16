@@ -11,6 +11,7 @@ from tools.probe_ucd2_replay_readonly import (
     GET_FILE_LIST_FRAME,
     GET_FILE_LIST_FRAMES,
     GET_OPTIONS_FRAME,
+    build_get_file_list_frame,
     candidate_http_paths,
     extract_frames,
     inner_request_code,
@@ -29,6 +30,7 @@ class FakeSocket:
 class Ucd2ReplaySafetyTests(unittest.TestCase):
     def test_captured_frames_are_only_read_commands(self):
         self.assertEqual(inner_request_code(GET_OPTIONS_FRAME), 8)
+        self.assertEqual(len(GET_FILE_LIST_FRAMES), 10)
         self.assertTrue(GET_FILE_LIST_FRAMES)
         self.assertTrue(
             all(inner_request_code(frame) == 13 for frame in GET_FILE_LIST_FRAMES)
@@ -49,6 +51,17 @@ class Ucd2ReplaySafetyTests(unittest.TestCase):
         self.assertEqual(frames, [GET_OPTIONS_FRAME, GET_FILE_LIST_FRAME])
         self.assertEqual(remaining, b"")
         self.assertEqual(discarded, 0)
+
+    def test_builds_read_only_page_beyond_verified_limit(self):
+        frame = build_get_file_list_frame(
+            1000,
+            inner_sequence_number=58,
+            outer_sequence_number=86,
+            nonce=b"test",
+        )
+        self.assertEqual(inner_request_code(frame), 13)
+        self.assertIn(b"\x10\xe8\x07", frame[12:-4])
+        self.assertEqual(frame[-4:], b"test")
 
     def test_http_candidates_preserve_only_expected_path_variants(self):
         paths = candidate_http_paths(

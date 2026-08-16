@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DIST="$ROOT/dist"
+DIST="$ROOT/Product"
 CACHE="$ROOT/.build-cache/python"
 NODE_VERSION="22.16.0"
 PYTHON_VERSION="3.14.6"
@@ -27,14 +27,19 @@ for command_name in clang codesign curl ditto node npm python3 rsync sips tar; d
   command -v "$command_name" >/dev/null || { print -u2 "missing build command: $command_name"; exit 1; }
 done
 
+if [[ ! -x "$ROOT/web/node_modules/.bin/vinext" ]]; then
+  print "Installing locked web build dependencies..."
+  npm_config_cache="$ROOT/.build-cache/npm" npm --prefix "$ROOT/web" ci
+fi
+
 mkdir -p "$DIST" "$CACHE"
 if [[ "$TARGET" == "all" || "$TARGET" == "arm64" ]]; then
-  [[ -s "$ARM_ARCHIVE" ]] || curl -L --fail --retry 3 -o "$ARM_ARCHIVE" "$ARM_URL"
-  [[ -s "$ARM_NODE_ARCHIVE" ]] || curl -L --fail --retry 3 -o "$ARM_NODE_ARCHIVE" "$ARM_NODE_URL"
+  [[ -s "$ARM_ARCHIVE" ]] || curl -L --fail --retry 3 --connect-timeout 20 --max-time 600 -o "$ARM_ARCHIVE" "$ARM_URL"
+  [[ -s "$ARM_NODE_ARCHIVE" ]] || curl -L --fail --retry 3 --connect-timeout 20 --max-time 600 -o "$ARM_NODE_ARCHIVE" "$ARM_NODE_URL"
 fi
 if [[ "$TARGET" == "all" || "$TARGET" == "x86_64" ]]; then
-  [[ -s "$INTEL_ARCHIVE" ]] || curl -L --fail --retry 3 -o "$INTEL_ARCHIVE" "$INTEL_URL"
-  [[ -s "$INTEL_NODE_ARCHIVE" ]] || curl -L --fail --retry 3 -o "$INTEL_NODE_ARCHIVE" "$INTEL_NODE_URL"
+  [[ -s "$INTEL_ARCHIVE" ]] || curl -L --fail --retry 3 --connect-timeout 20 --max-time 600 -o "$INTEL_ARCHIVE" "$INTEL_URL"
+  [[ -s "$INTEL_NODE_ARCHIVE" ]] || curl -L --fail --retry 3 --connect-timeout 20 --max-time 600 -o "$INTEL_NODE_ARCHIVE" "$INTEL_NODE_URL"
 fi
 
 ICON_CACHE="$ROOT/.build-cache/icon"

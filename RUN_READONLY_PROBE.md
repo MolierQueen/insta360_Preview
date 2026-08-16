@@ -14,7 +14,7 @@
 当前相机已确认使用新版 `UCD2` 封装。请先运行完全被动的抓帧工具；它连接后只调用 `recv()`，不会向相机发送应用数据：
 
 ```bash
-cd /Users/molier/Desktop/Myself/insta360
+cd /path/to/insta360_Preview
 .venv/bin/python tools/capture_ucd2_passive.py
 ```
 
@@ -23,14 +23,14 @@ cd /Users/molier/Desktop/Myself/insta360
 下面的旧协议探针仅保留用于 ONE RS 等旧机型；当前这台相机无需再次运行：
 
 ```bash
-cd /Users/molier/Desktop/Myself/insta360
+cd /path/to/insta360_Preview
 .venv/bin/python tools/probe_camera_readonly.py
 ```
 
 成功时终端会输出相机信息和文件列表。无论成功或失败，结果都会保存在：
 
 ```text
-/Users/molier/Desktop/Myself/insta360/output/
+./output/
 ```
 
 其中：

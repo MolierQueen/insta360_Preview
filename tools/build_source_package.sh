@@ -2,14 +2,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DIST="$ROOT/dist"
+DIST="$ROOT/Product"
 SOURCE="$DIST/InstaLibrary-Source"
 ZIP="$DIST/InstaLibrary-Source.zip"
 
 rm -rf "$SOURCE"
 mkdir -p "$SOURCE"
 
-for item in assets docs packaging tests tools vendor web; do
+for item in .agents assets docs packaging tests tools vendor web; do
   rsync -a \
     --exclude '.DS_Store' --exclude '__pycache__' --exclude '*.pyc' \
     --exclude '.git' --exclude '*.tsbuildinfo' \
@@ -22,7 +22,7 @@ for file in INSTA360_WIFI_DESKTOP_PLAN.md RUN_READONLY_PROBE.md WEB_APP.md requi
 done
 
 cp "$ROOT/docs/insta-library-implementation.html" "$SOURCE/README.html"
-cp "$ROOT/docs/SOURCE_README.md" "$SOURCE/README.md"
+cp "$ROOT/README.md" "$SOURCE/README.md"
 cp "$ROOT/docs/DEVELOPMENT.md" "$SOURCE/DEVELOPMENT.md"
 
 rm -f "$ZIP"

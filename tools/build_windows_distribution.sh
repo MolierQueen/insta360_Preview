@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DIST="$ROOT/dist"
+DIST="$ROOT/Product"
 CACHE="$ROOT/.build-cache/windows-x64"
 NODE_VERSION="22.16.0"
 PYTHON_VERSION="3.14.6"
@@ -22,12 +22,12 @@ done
 
 if [[ ! -x "$ROOT/web/node_modules/.bin/vinext" ]]; then
   print "Installing locked web build dependencies..."
-  npm --prefix "$ROOT/web" ci
+  npm_config_cache="$ROOT/.build-cache/npm" npm --prefix "$ROOT/web" ci
 fi
 
 mkdir -p "$DIST" "$CACHE"
-[[ -s "$PYTHON_ARCHIVE" ]] || curl -L --fail --retry 3 -o "$PYTHON_ARCHIVE" "$PYTHON_URL"
-[[ -s "$NODE_ARCHIVE" ]] || curl -L --fail --retry 3 -o "$NODE_ARCHIVE" "$NODE_URL"
+[[ -s "$PYTHON_ARCHIVE" ]] || curl -L --fail --retry 3 --connect-timeout 20 --max-time 600 -o "$PYTHON_ARCHIVE" "$PYTHON_URL"
+[[ -s "$NODE_ARCHIVE" ]] || curl -L --fail --retry 3 --connect-timeout 20 --max-time 600 -o "$NODE_ARCHIVE" "$NODE_URL"
 
 print "Building production web bundle..."
 (cd "$ROOT/web" && npm run build)

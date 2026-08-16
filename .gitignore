@@ -2,10 +2,15 @@
 *.DS_Store
 .venv/
 .build-cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.pcap
 web/node_modules/
 web/dist/
 web/.next/
 output/
+Product/
 Insta Library-Apple-Silicon.app/
 Insta Library-Intel.app/
 InstaLibrary-Source.zip

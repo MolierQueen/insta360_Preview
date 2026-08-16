@@ -23,6 +23,14 @@ cd insta360_Preview/InstaLibrary-Source
 
 准备开发依赖：
 
+如果使用 Codex，可以直接在仓库中输入：
+
+```text
+$build-insta-library 帮我检查环境并生成需要的架构包
+```
+
+源码里的 `.agents/skills/build-insta-library` 会选择维护好的构建脚本，并检查架构、签名、压缩包内容和校验值。
+
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
@@ -59,7 +67,13 @@ tools/build_distributions.sh all
 tools/build_windows_distribution.sh
 ```
 
-生成完成后，产物会出现在当前目录下的 `dist/`：
+Windows 10/11 x64 也可以在 PowerShell 中原生生成 Windows 包：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build_windows_distribution.ps1
+```
+
+生成完成后，产物会出现在当前目录下且不会提交到 Git 的 `Product/`：
 
 ```text
 Insta Library-Apple-Silicon.app

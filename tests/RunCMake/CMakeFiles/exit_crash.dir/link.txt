@@ -1,1 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/clang -O3 -DNDEBUG -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/exit_crash.dir/exit_crash.c.o -o exit_crash

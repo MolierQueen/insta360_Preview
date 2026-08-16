@@ -182,9 +182,9 @@ for frame in frames:
     sequence = inner_sequence(frame)
     if frame[6] == 4 and sequence is not None:
         responses[sequence] = frame</pre>
-        <h3>2. 文件目录与 500 条边界</h3>
-        <p>应用会先尝试读取相机 HTTP 目录索引。如果固件开放索引，就能取得完整目录，不受固定五页限制。如果目录索引关闭，则降级到五个已验证的 UCD2 分页帧，最多确认前 500 个文件，并在页面上明确显示截断提示。</p>
-        <div class="callout"><strong>“分页 300”与“协议 500”是两件事</strong><p>300 是浏览器每页渲染数量，控制页面性能；500 是降级协议能够确认的最大目录范围。界面分页不会凭空突破相机协议边界。</p></div>
+        <h3>2. 文件目录与已验证边界</h3>
+        <p>应用会先尝试读取相机 HTTP 目录索引和官方 OSC 分页。两者都不可用时，才降级到十个通过网络镜像捕获并经相机验证的 UCD2 分页帧，最多可靠确认前 1000 个文件，并在页面上明确显示截断提示。</p>
+        <div class="callout"><strong>“分页 300”与“协议 1000”是两件事</strong><p>300 是浏览器每页渲染数量，控制页面性能；1000 是当前降级协议经过真实相机验证的目录范围。界面分页不会凭空突破相机协议边界。</p></div>
         <h3>3. 精确路径白名单</h3>
         <p>媒体代理不接受任意文件系统路径。每次请求都必须与当前相机目录中的某个字符串完全相等；即使有人手工修改 URL，也不能借代理读取未列出的地址。</p>
         <pre>def assert_known_path(self, path):
@@ -231,7 +231,7 @@ latitude  = asin(direction.y);</pre>
             <tr><td>控制命令</td><td>允许列表仅含 8、13</td><td>未知或写命令在 Socket 发送前被拒绝</td></tr>
             <tr><td>文件路径</td><td>当前目录精确白名单</td><td>阻止路径注入和越权代理</td></tr>
             <tr><td>网络监听</td><td>仅 127.0.0.1</td><td>其他局域网设备无法调用本机 API</td></tr>
-            <tr><td>目录完整性</td><td>截断状态显式展示</td><td>不把前 500 条伪装成完整目录</td></tr>
+            <tr><td>目录完整性</td><td>截断状态显式展示</td><td>不把前 1000 条伪装成完整目录</td></tr>
             <tr><td>进程退出</td><td>网页 shutdown → API shutdown → 父进程回收</td><td>相机会话和两个本地端口一并关闭</td></tr>
           </tbody>
         </table></div>
@@ -312,7 +312,7 @@ tools/build_distributions.sh all</pre>
           <thead><tr><th>项目</th><th>当前状态</th><th>说明</th></tr></thead>
           <tbody>
             <tr><td>相机型号</td><td class="limit">需要逐机验证</td><td>固定帧来自当前实机；不同固件可能改变响应或会话行为。</td></tr>
-            <tr><td>超过 500 个文件</td><td>条件支持</td><td>HTTP 目录索引开放时无限制；关闭时降级为前 500 条并提示。</td></tr>
+            <tr><td>超过 500 个文件</td><td>支持</td><td>HTTP/OSC 可完整翻页；两者关闭时，UCD2 降级路径已验证到前 1000 条。</td></tr>
             <tr><td>DNG 浏览器预览</td><td class="limit">不支持</td><td>提供原文件下载，不在浏览器内做 RAW 解码。</td></tr>
             <tr><td>360 照片预览</td><td>支持 2:1 全景</td><td>自动识别等距柱状图；未经拼接的双鱼眼原片不能直接转换为球面视角。</td></tr>
             <tr><td>视频格式兼容</td><td>依浏览器解码器</td><td>LRV/MP4 通常可用；特殊编码可能只显示占位并允许下载。</td></tr>

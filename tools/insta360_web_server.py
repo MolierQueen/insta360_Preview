@@ -25,6 +25,7 @@ from probe_ucd2_replay_readonly import (
     GET_FILE_LIST_FRAMES,
     GET_OPTIONS_FRAME,
     SYNC,
+    build_get_file_list_frame,
     extract_frames,
     extract_paths,
     inner_request_code,
@@ -38,6 +39,11 @@ CAMERA_HOST = "192.168.42.1"
 CAMERA_PORT = 6666
 KEEPALIVE_FRAME = bytes.fromhex("55434432010c0512000000009173b3f3")
 ALLOWED_COMMANDS = {8, 13}
+OSC_PAGE_SIZE = 100
+OSC_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+UCD2_PAGE_SIZE = 100
+UCD2_MAX_FILES = 100_000
+UCD2_VERIFIED_FILE_LIMIT = len(GET_FILE_LIST_FRAMES) * UCD2_PAGE_SIZE
 DATE_PATTERN = re.compile(r"_(\d{8})_(\d{6})_")
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -209,6 +215,19 @@ def parse_directory_listing(data: bytes, directory: str) -> list[str]:
     return list(dict.fromkeys(found))
 
 
+def normalize_osc_file_path(entry: dict) -> str | None:
+    """Return an HTTP-downloadable camera path from one OSC listFiles entry."""
+    raw = entry.get("_localFileUrl") or entry.get("fileUrl")
+    if not isinstance(raw, str) or not raw:
+        return None
+    path = unquote(urlparse(raw).path).replace("\\", "/")
+    if path.startswith("/DCIM/"):
+        path = "/storage_internal" + path
+    if not path.startswith("/storage_internal/DCIM/") or ".." in path.split("/"):
+        return None
+    return path if media_type(path) != "other" else None
+
+
 class CameraSession:
     def __init__(self, host: str = CAMERA_HOST, port: int = CAMERA_PORT):
         self.host = host
@@ -249,6 +268,7 @@ class CameraSession:
                 "read_only": True,
                 "list_source": self.list_source,
                 "list_truncated": self.list_truncated,
+                "verified_ucd2_limit": UCD2_VERIFIED_FILE_LIMIT,
             }
 
     def connect(self) -> dict:
@@ -308,6 +328,27 @@ class CameraSession:
                 self.list_truncated = False
                 return file_records(self.files)
 
+        osc_paths = self._discover_osc_files()
+        if osc_paths:
+            with self._state_lock:
+                self.files = osc_paths
+                self.list_source = "osc_paginated"
+                self.list_truncated = False
+                return file_records(self.files)
+
+        paths, dynamic_pagination = self._discover_ucd2_files()
+        with self._state_lock:
+            self.files = list(dict.fromkeys(paths))
+            self.list_source = (
+                "ucd2_paginated" if dynamic_pagination else "ucd2_fixed_pages"
+            )
+            self.list_truncated = (
+                not dynamic_pagination and len(paths) >= UCD2_VERIFIED_FILE_LIMIT
+            )
+            return file_records(self.files)
+
+    def _discover_ucd2_files(self) -> tuple[list[str], bool]:
+        """Read verified pages, then continue with generated read-only pages."""
         paths: list[str] = []
         last_page_size = 0
         for frame in GET_FILE_LIST_FRAMES:
@@ -315,11 +356,35 @@ class CameraSession:
             page_paths = extract_paths(response_data)
             last_page_size = len(page_paths)
             paths.extend(page_paths)
-        with self._state_lock:
-            self.files = list(dict.fromkeys(paths))
-            self.list_source = "ucd2_fixed_pages"
-            self.list_truncated = last_page_size >= 100
-            return file_records(self.files)
+            if last_page_size < UCD2_PAGE_SIZE:
+                return paths, True
+
+        start = len(GET_FILE_LIST_FRAMES) * UCD2_PAGE_SIZE
+        inner_number = (inner_sequence(GET_FILE_LIST_FRAMES[-1]) or 29) + 1
+        outer_number = (GET_FILE_LIST_FRAMES[-1][7] + 1) & 0xFF
+        generated_page_accepted = False
+        while start < UCD2_MAX_FILES:
+            frame = build_get_file_list_frame(
+                start,
+                inner_sequence_number=inner_number,
+                outer_sequence_number=outer_number,
+            )
+            try:
+                response_data = self._request(frame, timeout=4.0, parse_info=False)
+            except (TimeoutError, ConnectionError, RuntimeError, ValueError) as exc:
+                logging.warning("UCD2 dynamic page at %d was rejected: %s", start, exc)
+                return paths, False
+
+            generated_page_accepted = True
+            page_paths = extract_paths(response_data)
+            paths.extend(page_paths)
+            if len(page_paths) < UCD2_PAGE_SIZE:
+                return paths, True
+            start += UCD2_PAGE_SIZE
+            inner_number = (inner_number + 1) & 0xFFFFFF
+            outer_number = (outer_number + 1) & 0xFF
+
+        return paths, generated_page_accepted
 
     def records(self) -> list[dict]:
         with self._state_lock:
@@ -340,6 +405,87 @@ class CameraSession:
             return parse_directory_listing(data, directory)
         except (OSError, http.client.HTTPException):
             return []
+        finally:
+            connection.close()
+
+    def _discover_osc_files(self) -> list[str]:
+        """Read the full SD-card index with the official OSC pagination cursor."""
+        try:
+            info = self._osc_json_request("GET", "/osc/info")
+            api = info.get("api", []) if isinstance(info, dict) else []
+            if api and "/osc/commands/execute" not in api:
+                return []
+
+            paths: list[str] = []
+            seen: set[str] = set()
+            start = 0
+            total_entries: int | None = None
+            while total_entries is None or start < total_entries:
+                payload = {
+                    "name": "camera.listFiles",
+                    "parameters": {
+                        "fileType": "all",
+                        "startPosition": start,
+                        "entryCount": OSC_PAGE_SIZE,
+                        "maxThumbSize": None,
+                    },
+                }
+                response = self._osc_json_request(
+                    "POST", "/osc/commands/execute", payload
+                )
+                if response.get("state") != "done":
+                    return []
+                results = response.get("results")
+                if not isinstance(results, dict):
+                    return []
+                entries = results.get("entries")
+                if not isinstance(entries, list):
+                    return []
+                reported_total = results.get("totalEntries")
+                if isinstance(reported_total, int) and reported_total >= 0:
+                    total_entries = reported_total
+                if not entries:
+                    break
+
+                previous_count = len(seen)
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    path = normalize_osc_file_path(entry)
+                    if path and path not in seen:
+                        seen.add(path)
+                        paths.append(path)
+
+                start += len(entries)
+                if len(seen) == previous_count:
+                    return []
+            return paths
+        except (OSError, http.client.HTTPException, ValueError, json.JSONDecodeError):
+            return []
+
+    def _osc_json_request(
+        self, method: str, path: str, payload: dict | None = None
+    ) -> dict:
+        body = None if payload is None else json.dumps(payload).encode("utf-8")
+        headers = {
+            "Accept": "application/json",
+            "X-XSRF-Protected": "1",
+        }
+        if body is not None:
+            headers["Content-Type"] = "application/json;charset=utf-8"
+        connection = http.client.HTTPConnection(self.host, 80, timeout=8.0)
+        try:
+            connection.request(method, path, body=body, headers=headers)
+            response = connection.getresponse()
+            data = response.read(OSC_MAX_RESPONSE_BYTES + 1)
+            if response.status != 200:
+                raise ValueError(f"OSC returned HTTP {response.status}")
+            if len(data) > OSC_MAX_RESPONSE_BYTES:
+                raise ValueError("OSC response exceeds 8 MiB")
+            value = json.loads(data.decode("utf-8"))
+            if not isinstance(value, dict):
+                raise ValueError("OSC response is not an object")
+            return value
         finally:
             connection.close()
 

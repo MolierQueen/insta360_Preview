@@ -16,8 +16,9 @@ type CameraStatus = {
   file_count: number;
   counts: { photo: number; video: number; other: number };
   read_only: boolean;
-  list_source: "not_loaded" | "http_directory" | "ucd2_fixed_pages";
+  list_source: "not_loaded" | "http_directory" | "osc_paginated" | "ucd2_paginated" | "ucd2_fixed_pages";
   list_truncated: boolean;
+  verified_ucd2_limit: number;
 };
 
 type CameraFile = {
@@ -59,6 +60,7 @@ const emptyStatus: CameraStatus = {
   read_only: true,
   list_source: "not_loaded",
   list_truncated: false,
+  verified_ucd2_limit: 1000,
 };
 
 function endpoint(path: string) {
@@ -1156,7 +1158,8 @@ export default function Home() {
       {error && <div className="error-banner"><span>!</span>{error}</div>}
       {status.connected && status.list_truncated && (
         <div className="warning-banner">
-          当前固件关闭了 HTTP 目录索引，只读协议只能确认前 500 个文件；界面分页不受影响，但更早文件可能未列出。
+          当前相机拒绝了第 {status.verified_ucd2_limit} 个文件之后的动态 UCD2 页，只能确认前 {status.verified_ucd2_limit} 个文件；
+          请保留应用日志以便继续适配该固件。
         </div>
       )}
 

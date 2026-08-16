@@ -12,6 +12,7 @@ from insta360_web_server import (
     file_records,
     media_mime,
     media_type,
+    normalize_osc_file_path,
     parse_directory_listing,
 )
 
@@ -66,6 +67,97 @@ class WebServerSafetyTests(unittest.TestCase):
             parse_directory_listing(listing, "/storage_internal/DCIM/Camera01/"),
             ["/storage_internal/DCIM/Camera01/IMG_20260101_010203_00_001.jpg"],
         )
+
+    def test_normalizes_osc_local_and_absolute_urls(self):
+        expected = "/storage_internal/DCIM/Camera01/IMG_20260101_010203_00_001.jpg"
+        self.assertEqual(
+            normalize_osc_file_path({"_localFileUrl": "/DCIM/Camera01/IMG_20260101_010203_00_001.jpg"}),
+            expected,
+        )
+        self.assertEqual(
+            normalize_osc_file_path({"fileUrl": "http://192.168.42.1/DCIM/Camera01/IMG_20260101_010203_00_001.jpg"}),
+            expected,
+        )
+
+    def test_rejects_osc_paths_outside_camera_media_directory(self):
+        self.assertIsNone(normalize_osc_file_path({"_localFileUrl": "/etc/passwd"}))
+        self.assertIsNone(normalize_osc_file_path({"_localFileUrl": "/DCIM/../etc/passwd.jpg"}))
+
+    def test_osc_pagination_reads_past_500_entries(self):
+        class FakeOscSession(CameraSession):
+            def __init__(self):
+                super().__init__()
+                self.starts = []
+
+            def _osc_json_request(self, method, path, payload=None):
+                if method == "GET":
+                    return {"api": ["/osc/commands/execute"]}
+                start = payload["parameters"]["startPosition"]
+                self.starts.append(start)
+                end = min(start + 100, 650)
+                return {
+                    "state": "done",
+                    "results": {
+                        "entries": [
+                            {"_localFileUrl": f"/DCIM/Camera01/IMG_{index:06d}.jpg"}
+                            for index in range(start, end)
+                        ],
+                        "totalEntries": 650,
+                    },
+                }
+
+        session = FakeOscSession()
+        paths = session._discover_osc_files()
+        self.assertEqual(len(paths), 650)
+        self.assertEqual(session.starts, [0, 100, 200, 300, 400, 500, 600])
+
+    def test_osc_pagination_advances_by_firmware_page_size(self):
+        class CappedOscSession(CameraSession):
+            def __init__(self):
+                super().__init__()
+                self.starts = []
+
+            def _osc_json_request(self, method, path, payload=None):
+                if method == "GET":
+                    return {"api": ["/osc/commands/execute"]}
+                start = payload["parameters"]["startPosition"]
+                self.starts.append(start)
+                end = min(start + 30, 65)
+                return {
+                    "state": "done",
+                    "results": {
+                        "entries": [
+                            {"_localFileUrl": f"/DCIM/Camera01/VID_{index:06d}.mp4"}
+                            for index in range(start, end)
+                        ],
+                        "totalEntries": 65,
+                    },
+                }
+
+        session = CappedOscSession()
+        self.assertEqual(len(session._discover_osc_files()), 65)
+        self.assertEqual(session.starts, [0, 30, 60])
+
+    def test_ucd2_pagination_stops_on_partial_verified_page(self):
+        class FakeUcd2Session(CameraSession):
+            def __init__(self):
+                super().__init__()
+                self.page = 0
+
+            def _request(self, frame, timeout=10.0, parse_info=True):
+                start = self.page * 100
+                self.page += 1
+                count = 50 if start == 500 else 100
+                return b"\n".join(
+                    f"/storage_internal/DCIM/Camera01/IMG_{index:06d}.jpg".encode()
+                    for index in range(start, start + count)
+                )
+
+        session = FakeUcd2Session()
+        paths, complete = session._discover_ucd2_files()
+        self.assertTrue(complete)
+        self.assertEqual(len(paths), 550)
+        self.assertEqual(session.page, 6)
 
 
 if __name__ == "__main__":

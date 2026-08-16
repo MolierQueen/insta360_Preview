@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Insta Library"
+  short_description: "Build verified macOS and Windows packages"
+  default_prompt: "Use $build-insta-library to inspect this machine and build the requested distribution packages."

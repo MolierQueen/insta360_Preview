@@ -8,6 +8,7 @@ import http.client
 import json
 import logging
 import re
+import secrets
 import socket
 import sys
 import time
@@ -38,17 +39,77 @@ GET_OPTIONS_FRAME = bytes.fromhex(
 GET_FILE_LIST_FRAMES = [
     bytes.fromhex(value)
     for value in (
-        # start=0 (omitted), 100, 200, 300 and 400.  Each requests at most
-        # 100 current paths from internal storage.
-        "55434432010c041f130000000d00020f0000800000080218ffffffff072002e44acc07",
-        "55434432010c0422150000000d00021200008000000802106418ffffffff072002bc728c37",
-        "55434432010c0426160000000d0002160000800000080210c80118ffffffff07200290a8ce20",
-        "55434432010c042b160000000d00021b0000800000080210ac0218ffffffff0720029d4e6596",
-        "55434432010c042d160000000d00021d0000800000080210900318ffffffff07200225e6b0ca",
+        # Official iOS app requests captured from one camera session. Starts are
+        # 0 (omitted), 100, ... 900; every page requests at most 100 paths.
+        "55434432010c0430130000000d0002140000800000080218ffffffff072002836c5844",
+        "55434432010c0438150000000d00021c00008000000802106418ffffffff07200293cdab77",
+        "55434432010c043d160000000d0002210000800000080210c80118ffffffff07200236798abf",
+        "55434432010c0444160000000d0002280000800000080210ac0218ffffffff0720025837c3e1",
+        "55434432010c0448160000000d00022c0000800000080210900318ffffffff072002fb09ce94",
+        "55434432010c044a160000000d00022e0000800000080210f40318ffffffff0720028fda89bb",
+        "55434432010c044d160000000d0002310000800000080210d80418ffffffff072002599dcbed",
+        "55434432010c0450160000000d0002340000800000080210bc0518ffffffff0720022304f72a",
+        "55434432010c0453160000000d0002370000800000080210a00618ffffffff072002af4e1305",
+        "55434432010c0455160000000d0002390000800000080210840718ffffffff0720025483660f",
     )
 ]
 GET_FILE_LIST_FRAME = GET_FILE_LIST_FRAMES[0]
 ALLOWED_COMMANDS = {8, 13}
+
+
+def encode_varint(value: int) -> bytes:
+    if value < 0:
+        raise ValueError("varint value must be non-negative")
+    encoded = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        encoded.append(byte | (0x80 if value else 0))
+        if not value:
+            return bytes(encoded)
+
+
+def build_get_file_list_frame(
+    start: int,
+    *,
+    inner_sequence_number: int,
+    outer_sequence_number: int,
+    nonce: bytes | None = None,
+) -> bytes:
+    """Build a read-only UCD2 GET_FILE_LIST request for an arbitrary offset.
+
+    The final four bytes are undocumented. Captured frames replay across
+    sessions, so generated read-only pages use a fresh opaque value; callers
+    must retain the verified fixed-page fallback for firmware that rejects it.
+    """
+    if start < 0:
+        raise ValueError("file-list offset must be non-negative")
+    if not 0 <= inner_sequence_number <= 0xFFFFFF:
+        raise ValueError("inner sequence must fit in 24 bits")
+    if not 0 <= outer_sequence_number <= 0xFF:
+        raise ValueError("outer sequence must fit in 8 bits")
+    opaque_nonce = secrets.token_bytes(4) if nonce is None else nonce
+    if len(opaque_nonce) != 4:
+        raise ValueError("UCD2 nonce must contain exactly four bytes")
+
+    protobuf = bytearray(b"\x08\x02")
+    if start:
+        protobuf += b"\x10" + encode_varint(start)
+    protobuf += b"\x18\xff\xff\xff\xff\x07\x20\x02"
+    payload = (
+        b"\x0d\x00\x02"
+        + inner_sequence_number.to_bytes(3, "little")
+        + b"\x80\x00\x00"
+        + bytes(protobuf)
+    )
+    return (
+        MAGIC
+        + b"\x01\x0c\x04"
+        + bytes((outer_sequence_number,))
+        + len(payload).to_bytes(4, "little")
+        + payload
+        + opaque_nonce
+    )
 
 
 def ucd2_frame_length(buffer: bytes) -> int | None:
