@@ -17,13 +17,9 @@ for item in .agents assets docs packaging tests tools vendor web; do
     "$ROOT/$item" "$SOURCE/"
 done
 
-for file in INSTA360_WIFI_DESKTOP_PLAN.md RUN_READONLY_PROBE.md WEB_APP.md requirements.txt; do
+for file in README.md requirements.txt; do
   cp "$ROOT/$file" "$SOURCE/"
 done
-
-cp "$ROOT/docs/insta-library-implementation.html" "$SOURCE/README.html"
-cp "$ROOT/README.md" "$SOURCE/README.md"
-cp "$ROOT/docs/DEVELOPMENT.md" "$SOURCE/DEVELOPMENT.md"
 
 rm -f "$ZIP"
 ditto -c -k --sequesterRsrc --keepParent "$SOURCE" "$ZIP"

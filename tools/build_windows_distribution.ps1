@@ -71,9 +71,9 @@ $CmdSource = Join-Path $Root "packaging\windows\Insta Library.cmd"
 $CmdTarget = Join-Path $App "Insta Library.cmd"
 $CmdText = [System.IO.File]::ReadAllText($CmdSource) -replace "`r?`n", "`r`n"
 [System.IO.File]::WriteAllText($CmdTarget, $CmdText, [System.Text.UTF8Encoding]::new($false))
-Copy-Item (Join-Path $Root "packaging\windows\README-使用说明.txt") (Join-Path $App "README.txt")
+Copy-Item (Join-Path $Root "README.md") (Join-Path $App "README.md")
 Copy-Item (Join-Path $Root "packaging\licenses\NODE_LICENSE") (Join-Path $App "Resources\Licenses\Node-LICENSE")
-Copy-Item (Join-Path $Root "packaging\THIRD_PARTY_NOTICES.md") (Join-Path $App "Resources\Licenses\THIRD_PARTY_NOTICES.md")
+Copy-Item (Join-Path $Root "docs\THIRD_PARTY_NOTICES.md") (Join-Path $App "Resources\Licenses\THIRD_PARTY_NOTICES.md")
 
 & tar -xzf $PythonArchive -C $Runtime
 if ($LASTEXITCODE -ne 0) { throw "Python runtime extraction failed" }

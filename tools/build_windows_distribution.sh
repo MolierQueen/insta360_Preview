@@ -38,9 +38,9 @@ mkdir -p "$APP_ROOT/tools" "$APP_ROOT/vendor/insta360-wifi-api" \
 
 cp "$ROOT/packaging/windows/Insta Library.cmd" "$APP/Insta Library.cmd"
 perl -pi -e 's/\r?\n/\r\n/g' "$APP/Insta Library.cmd"
-cp "$ROOT/packaging/windows/README-使用说明.txt" "$APP/README.txt"
+cp "$ROOT/README.md" "$APP/README.md"
 cp "$ROOT/packaging/licenses/NODE_LICENSE" "$APP/Resources/Licenses/Node-LICENSE"
-cp "$ROOT/packaging/THIRD_PARTY_NOTICES.md" "$APP/Resources/Licenses/THIRD_PARTY_NOTICES.md"
+cp "$ROOT/docs/THIRD_PARTY_NOTICES.md" "$APP/Resources/Licenses/THIRD_PARTY_NOTICES.md"
 
 tar -xzf "$PYTHON_ARCHIVE" -C "$RUNTIME"
 NODE_EXTRACT="$CACHE/node-extract"

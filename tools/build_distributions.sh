@@ -86,7 +86,7 @@ function build_app() {
   cp "$ROOT/packaging/InstaLibraryLauncher" "$app/Contents/MacOS/InstaLibraryLauncher"
   cp "$ICON_CACHE/AppIcon.icns" "$resources/AppIcon.icns"
   cp "$ROOT/packaging/licenses/NODE_LICENSE" "$resources/Licenses/Node-LICENSE"
-  cp "$ROOT/packaging/THIRD_PARTY_NOTICES.md" "$resources/Licenses/THIRD_PARTY_NOTICES.md"
+  cp "$ROOT/docs/THIRD_PARTY_NOTICES.md" "$resources/Licenses/THIRD_PARTY_NOTICES.md"
   cp "$ROOT/vendor/ultrahdr/LICENSE" "$resources/Licenses/UltraHDR-LICENSE"
 
   clang -Os -arch "$architecture" -mmacosx-version-min=11.0 \
@@ -133,5 +133,6 @@ function build_app() {
 [[ "$TARGET" == "all" || "$TARGET" == "arm64" ]] && build_app arm64 "Apple-Silicon" "$ARM_ARCHIVE" "$ARM_NODE_ARCHIVE" "node-v$NODE_VERSION-darwin-arm64"
 [[ "$TARGET" == "all" || "$TARGET" == "x86_64" ]] && build_app x86_64 "Intel" "$INTEL_ARCHIVE" "$INTEL_NODE_ARCHIVE" "node-v$NODE_VERSION-darwin-x64"
 
-cp "$ROOT/packaging/DISTRIBUTION_README.md" "$DIST/README-分发说明.md"
+rm -f "$DIST/README-分发说明.md"
+cp "$ROOT/README.md" "$DIST/README.md"
 print "Distribution build complete."
